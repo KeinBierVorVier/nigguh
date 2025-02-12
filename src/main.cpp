@@ -93,7 +93,16 @@ int main() {
         }
 
         if (msg.starts_with("!nword")) {
-            bot.message_create(dpp::message(event.msg.channel_id, "<@" + std::to_string(user_id) + "> N-Word count: " + std::to_string(users[user_id])));
+            std::istringstream iss(msg);
+            std::string cmd, target_user;
+            iss >> cmd >> target_user;
+
+            // Extract user ID from mention again :sob:
+            if (target_user.starts_with("<@") && target_user.ends_with(">"))
+                target_user = target_user.substr(2, target_user.size() - 3);
+
+            dpp::snowflake target_id = target_user.empty() ? user_id : std::stoull(target_user);
+            bot.message_create(dpp::message(event.msg.channel_id, "<@" + std::to_string(target_id) + "> N-Word count: " + std::to_string(users[target_id])));
         }
 
         bot.guild_get_member(event.msg.guild_id, user_id, [&bot, event, msg, user_id](const dpp::confirmation_callback_t& cb) {
@@ -105,21 +114,24 @@ int main() {
 
             if (msg.starts_with("!add") && is_admin) {
                 std::istringstream iss(msg);
-                std::string cmd;
-                dpp::snowflake target_id;
+                std::string cmd, target_user;
+
                 int amount;
-                iss >> cmd >> target_id >> amount;
+                iss >> cmd >> target_user >> amount;
 
-                if (amount <= 0) {
-                    bot.message_create(dpp::message(event.msg.channel_id, "Usage: !add <user_id> <amount>"));
-                    return;
+                // Extract user ID from mention
+                if (target_user.starts_with("<@") && target_user.ends_with(">"))
+                    target_user = target_user.substr(2, target_user.size() - 3);
+
+                try {
+                    dpp::snowflake target_id = std::stoull(target_user);
+                    users[target_id] += std::max(amount, 0);
+
+                    save_data();
+                    bot.message_create(dpp::message(event.msg.channel_id, "Added " + std::to_string(amount) + " to <@" + std::to_string(target_id) + ">"));
+                } catch (...) {
+                    bot.message_create(dpp::message(event.msg.channel_id, "Usage: !add @user amount"));
                 }
-
-                users.try_emplace(target_id, 0);
-                users[target_id] += amount;
-                save_data();
-
-                bot.message_create(dpp::message(event.msg.channel_id, "Added " + std::to_string(amount) + " to <@" + std::to_string(target_id) + ">"));
             }
         });
 
